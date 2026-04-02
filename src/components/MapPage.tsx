@@ -77,12 +77,27 @@ export default function MapPage() {
         ymapRef.current = map;
         setMapReady(true);
 
-        // Try to center on user location
+        // Show user location on load
         navigator.geolocation?.getCurrentPosition(
           (pos) => {
-            map.setCenter([pos.coords.latitude, pos.coords.longitude], 16);
+            const coord: [number, number] = [pos.coords.latitude, pos.coords.longitude];
+            map.setCenter(coord, 16);
+
+            const userMark = new window.ymaps.Placemark(
+              coord,
+              { balloonContent: "Вы здесь" },
+              {
+                preset: "islands#circleDotIcon",
+                iconColor: "#22c55e",
+              }
+            );
+            map.geoObjects.add(userMark);
+            currentMarkerRef.current = userMark;
           },
-          () => {}
+          () => {
+            setLocationError("Нет доступа к геолокации. Разрешите доступ в настройках браузера.");
+          },
+          { enableHighAccuracy: true, timeout: 10000 }
         );
       });
     };
