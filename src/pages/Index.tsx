@@ -36,15 +36,16 @@ const tabs: { id: Tab; label: string; icon: string }[] = [
 export default function Index() {
   const [user, setUser] = useState<User | null>(null);
   const [sessionId, setSessionId] = useState<string>("");
-  const [authChecked, setAuthChecked] = useState(false);
+  const [authChecked, setAuthChecked] = useState(true);
   const [activeTab, setActiveTab] = useState<Tab>("map");
   const [viewedRacer, setViewedRacer] = useState<ViewedRacer | null>(null);
 
   // Restore session on load
   useEffect(() => {
     const saved = localStorage.getItem("session_id");
-    if (!saved) { setAuthChecked(true); return; }
+    if (!saved) return;
 
+    setAuthChecked(false);
     fetch(`${AUTH_URL}?action=me`, { headers: { "X-Session-Id": saved } })
       .then(r => r.json())
       .then(data => {
@@ -56,9 +57,7 @@ export default function Index() {
         }
       })
       .catch(() => {})
-      .finally(() => setAuthChecked(false));
-
-    setAuthChecked(true);
+      .finally(() => setAuthChecked(true));
   }, []);
 
   const handleLogin = (u: User, sid: string) => {
