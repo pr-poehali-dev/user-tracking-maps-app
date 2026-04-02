@@ -1,5 +1,6 @@
 """
 Авторизация: вход по номеру телефона и паролю, выход, получение текущего профиля, список гонщиков (для админа).
+Deps: psycopg2-binary
 """
 import json
 import os
@@ -23,16 +24,25 @@ def handler(event: dict, context) -> dict:
     if event.get("httpMethod") == "OPTIONS":
         return {"statusCode": 200, "headers": CORS, "body": ""}
 
-    path = event.get("path", "/")
     method = event.get("httpMethod", "GET")
+    params = event.get("queryStringParameters") or {}
+    action = params.get("action", "")
 
-    if path.endswith("/login") and method == "POST":
+    # Also try to get action from body for POST
+    if not action and method == "POST":
+        try:
+            body = json.loads(event.get("body") or "{}")
+            action = body.get("action", "")
+        except Exception:
+            pass
+
+    if action == "login" and method == "POST":
         return login(event)
-    if path.endswith("/logout") and method == "POST":
+    if action == "logout" and method == "POST":
         return logout(event)
-    if path.endswith("/me") and method == "GET":
+    if action == "me" and method == "GET":
         return me(event)
-    if path.endswith("/racers") and method == "GET":
+    if action == "racers" and method == "GET":
         return get_racers(event)
 
     return {"statusCode": 404, "headers": CORS, "body": json.dumps({"error": "Not found"})}

@@ -1,10 +1,27 @@
 {
   "tests": [
     {
-      "name": "Health check - root returns 404",
+      "name": "Login admin success",
+      "method": "POST",
+      "path": "/?action=login",
+      "body": {"phone": "+79000000001", "pwd": "admin123"},
+      "expectedStatus": 200,
+      "expectedBody": {"session_id": "string"},
+      "bodyMatcher": "partial"
+    },
+    {
+      "name": "Login wrong password",
+      "method": "POST",
+      "path": "/?action=login",
+      "body": {"phone": "+79000000001", "pwd": "wrong"},
+      "expectedStatus": 401,
+      "bodyMatcher": "partial"
+    },
+    {
+      "name": "Me without session",
       "method": "GET",
-      "path": "/",
-      "expectedStatus": 404,
+      "path": "/?action=me",
+      "expectedStatus": 401,
       "bodyMatcher": "partial"
     }
   ]

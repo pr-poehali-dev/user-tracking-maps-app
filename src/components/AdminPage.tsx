@@ -32,7 +32,7 @@ export default function AdminPage({ sessionId, onViewRacer, onLogout }: Props) {
   const [search, setSearch] = useState("");
 
   useEffect(() => {
-    fetch(`${AUTH_URL}/racers`, {
+    fetch(`${AUTH_URL}?action=racers`, {
       headers: { "X-Session-Id": sessionId },
     })
       .then(r => r.json())

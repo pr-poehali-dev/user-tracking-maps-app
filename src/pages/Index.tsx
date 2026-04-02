@@ -45,7 +45,7 @@ export default function Index() {
     const saved = localStorage.getItem("session_id");
     if (!saved) { setAuthChecked(true); return; }
 
-    fetch(`${AUTH_URL}/me`, { headers: { "X-Session-Id": saved } })
+    fetch(`${AUTH_URL}?action=me`, { headers: { "X-Session-Id": saved } })
       .then(r => r.json())
       .then(data => {
         if (data.id) {
@@ -67,7 +67,7 @@ export default function Index() {
   };
 
   const handleLogout = async () => {
-    await fetch(`${AUTH_URL}/logout`, {
+    await fetch(`${AUTH_URL}?action=logout`, {
       method: "POST",
       headers: { "X-Session-Id": sessionId },
     }).catch(() => {});
