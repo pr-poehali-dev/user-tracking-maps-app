@@ -1,7 +1,12 @@
-import { useState, useEffect } from "react";
+/* eslint-disable @typescript-eslint/no-explicit-any */
+import { useState, useEffect, useRef } from "react";
 import Icon from "@/components/ui/icon";
 
 const AUTH_URL = "https://functions.poehali.dev/dcf39eed-73a5-4fdb-bfd8-106c1a4abca2";
+
+declare global {
+  interface Window { ymaps: any; }
+}
 
 interface Racer {
   id: number;
@@ -18,6 +23,7 @@ interface Props {
 }
 
 const COLORS = ["bg-blue-500", "bg-purple-500", "bg-amber-500", "bg-pink-500", "bg-cyan-500", "bg-orange-500"];
+const PIN_COLORS = ["#3b82f6", "#a855f7", "#f59e0b", "#ec4899", "#06b6d4", "#f97316"];
 
 const mockStats: Record<number, { km: string; runs: number; lastRun: string }> = {
   2: { km: "51.5", runs: 47, lastRun: "Сегодня" },
@@ -25,16 +31,117 @@ const mockStats: Record<number, { km: string; runs: number; lastRun: string }> =
   4: { km: "72.1", runs: 58, lastRun: "2 дн назад" },
 };
 
+// Демо-координаты гонщиков (Москва, разные точки)
+const mockCoords: Record<number, [number, number]> = {
+  2: [55.7558, 37.6173],
+  3: [55.7622, 37.6156],
+  4: [55.7490, 37.6218],
+};
+
+function AdminMap({ racers, onSelectRacer }: { racers: Racer[]; onSelectRacer: (r: Racer) => void }) {
+  const mapRef = useRef<HTMLDivElement>(null);
+  const ymapRef = useRef<any>(null);
+
+  useEffect(() => {
+    if (!racers.length) return;
+
+    const init = () => {
+      if (!mapRef.current || ymapRef.current) return;
+      window.ymaps.ready(() => {
+        const map = new window.ymaps.Map(mapRef.current, {
+          center: [55.7558, 37.6173],
+          zoom: 13,
+          controls: [],
+        });
+
+        map.panes.get("ground").getElement().style.filter =
+          "invert(1) hue-rotate(180deg) brightness(0.8) saturate(0.9)";
+
+        ymapRef.current = map;
+
+        racers.forEach((racer, idx) => {
+          const coord = mockCoords[racer.id] || [55.7558 + idx * 0.005, 37.6173 + idx * 0.005];
+          const color = PIN_COLORS[idx % PIN_COLORS.length];
+
+          const placemark = new window.ymaps.Placemark(
+            coord,
+            { balloonContent: racer.name },
+            {
+              iconLayout: "default#imageWithContent",
+              iconImageHref: "",
+              iconImageSize: [40, 40],
+              iconImageOffset: [-20, -40],
+              iconContentLayout: window.ymaps.templateLayoutFactory.createClass(
+                `<div style="
+                  width:36px;height:36px;border-radius:50%;
+                  background:${color};border:2px solid white;
+                  display:flex;align-items:center;justify-content:center;
+                  font-family:Oswald,sans-serif;font-size:12px;color:white;font-weight:600;
+                  box-shadow:0 0 10px ${color}88;
+                  cursor:pointer;
+                ">${racer.initials}</div>`
+              ),
+            }
+          );
+
+          placemark.events.add("click", () => onSelectRacer(racer));
+          map.geoObjects.add(placemark);
+        });
+
+        // Fit all markers
+        if (racers.length > 1) {
+          map.setBounds(map.geoObjects.getBounds(), { checkZoomRange: true, zoomMargin: 60 });
+        }
+      });
+    };
+
+    if (window.ymaps) { init(); }
+    else {
+      const iv = setInterval(() => { if (window.ymaps) { clearInterval(iv); init(); } }, 200);
+      return () => clearInterval(iv);
+    }
+  }, [racers]);
+
+  return (
+    <div className="relative w-full" style={{ height: "320px" }}>
+      <div ref={mapRef} className="absolute inset-0 rounded-xl overflow-hidden" />
+      {!ymapRef.current && (
+        <div className="absolute inset-0 map-container rounded-xl flex items-center justify-center">
+          <div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+        </div>
+      )}
+      {/* Legend */}
+      <div className="absolute bottom-3 left-3 z-10 card-dark rounded-lg px-3 py-2">
+        <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1.5">Гонщики онлайн</p>
+        <div className="flex gap-2">
+          {racers.map((r, idx) => (
+            <button
+              key={r.id}
+              onClick={() => onSelectRacer(r)}
+              className="flex items-center gap-1 hover:opacity-80 transition-opacity"
+            >
+              <div
+                className="w-4 h-4 rounded-full flex-shrink-0"
+                style={{ background: PIN_COLORS[idx % PIN_COLORS.length] }}
+              />
+              <span className="text-[10px] text-white">{r.name.split(" ")[0]}</span>
+            </button>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function AdminPage({ sessionId, onViewRacer, onLogout }: Props) {
   const [racers, setRacers] = useState<Racer[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
+  const [activeTab, setActiveTab] = useState<"list" | "map">("map");
 
   useEffect(() => {
-    fetch(`${AUTH_URL}?action=racers`, {
-      headers: { "X-Session-Id": sessionId },
-    })
+    fetch(`${AUTH_URL}?action=racers`, { headers: { "X-Session-Id": sessionId } })
       .then(r => r.json())
       .then(data => {
         if (data.racers) setRacers(data.racers);
@@ -45,8 +152,7 @@ export default function AdminPage({ sessionId, onViewRacer, onLogout }: Props) {
   }, [sessionId]);
 
   const filtered = racers.filter(r =>
-    r.name.toLowerCase().includes(search.toLowerCase()) ||
-    r.phone.includes(search)
+    r.name.toLowerCase().includes(search.toLowerCase()) || r.phone.includes(search)
   );
 
   const totalKm = racers.reduce((s, r) => s + parseFloat(mockStats[r.id]?.km || "0"), 0);
@@ -56,7 +162,7 @@ export default function AdminPage({ sessionId, onViewRacer, onLogout }: Props) {
     <div className="flex flex-col h-full overflow-y-auto">
       <div className="p-4 space-y-4 animate-fade-in">
 
-        {/* Admin header */}
+        {/* Header */}
         <div className="flex items-center justify-between">
           <div>
             <h2 className="font-display text-2xl text-white uppercase tracking-wider">Кабинет админа</h2>
@@ -71,7 +177,7 @@ export default function AdminPage({ sessionId, onViewRacer, onLogout }: Props) {
           </button>
         </div>
 
-        {/* Summary cards */}
+        {/* Summary */}
         <div className="grid grid-cols-3 gap-3">
           <div className="stat-card rounded-xl p-3 text-center">
             <div className="font-display text-2xl neon-text">{racers.length}</div>
@@ -87,79 +193,106 @@ export default function AdminPage({ sessionId, onViewRacer, onLogout }: Props) {
           </div>
         </div>
 
-        {/* Search */}
-        <div className="relative">
-          <Icon name="Search" size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
-          <input
-            type="text"
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-            placeholder="Поиск по имени или телефону..."
-            className="w-full bg-muted border border-border rounded-xl pl-10 pr-4 py-2.5 text-white text-sm focus:outline-none focus:border-primary/60 transition-colors"
-          />
+        {/* Tabs */}
+        <div className="flex gap-2">
+          {([["map", "Map", "Карта"], ["list", "List", "Гонщики"]] as const).map(([id, icon, label]) => (
+            <button
+              key={id}
+              onClick={() => setActiveTab(id)}
+              className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-display uppercase tracking-wider transition-all ${
+                activeTab === id
+                  ? "bg-primary text-primary-foreground neon-glow"
+                  : "border border-border text-muted-foreground hover:border-primary/50"
+              }`}
+            >
+              <Icon name={icon as "Map"} size={13} />
+              {label}
+            </button>
+          ))}
         </div>
 
-        {/* Racers list */}
-        {loading && (
+        {/* Map tab */}
+        {activeTab === "map" && !loading && !error && (
+          <div className="animate-fade-in">
+            <AdminMap racers={racers} onSelectRacer={onViewRacer} />
+            <p className="text-[10px] text-muted-foreground text-center mt-2 uppercase tracking-wider">
+              Нажми на маркер гонщика чтобы открыть его кабинет
+            </p>
+          </div>
+        )}
+
+        {/* List tab */}
+        {activeTab === "list" && (
+          <div className="animate-fade-in space-y-3">
+            <div className="relative">
+              <Icon name="Search" size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+              <input
+                type="text"
+                value={search}
+                onChange={e => setSearch(e.target.value)}
+                placeholder="Поиск по имени или телефону..."
+                className="w-full bg-muted border border-border rounded-xl pl-10 pr-4 py-2.5 text-white text-sm focus:outline-none focus:border-primary/60 transition-colors"
+              />
+            </div>
+
+            {loading && (
+              <div className="flex justify-center py-8">
+                <div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+              </div>
+            )}
+
+            {error && (
+              <div className="bg-red-500/10 border border-red-500/30 rounded-xl px-4 py-3 flex items-center gap-2">
+                <Icon name="AlertCircle" size={14} className="text-red-400" />
+                <span className="text-xs text-red-300">{error}</span>
+              </div>
+            )}
+
+            {!loading && !error && (
+              <div className="space-y-2">
+                <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Гонщики · {filtered.length}</p>
+                {filtered.map((racer, idx) => {
+                  const stats = mockStats[racer.id];
+                  const color = COLORS[idx % COLORS.length];
+                  return (
+                    <div key={racer.id} className="stat-card rounded-xl p-4 animate-slide-up" style={{ animationDelay: `${idx * 0.05}s`, animationFillMode: "both" }}>
+                      <div className="flex items-center gap-3">
+                        <div className={`w-11 h-11 rounded-xl ${color} flex items-center justify-center font-display text-white text-sm flex-shrink-0`}>
+                          {racer.initials}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center justify-between">
+                            <span className="font-display text-sm text-white uppercase tracking-wider truncate">{racer.name}</span>
+                            {stats && <span className="font-mono-data text-xs neon-text ml-2 flex-shrink-0">{stats.km} км</span>}
+                          </div>
+                          <div className="flex items-center gap-3 mt-0.5">
+                            <span className="font-mono-data text-xs text-muted-foreground">{racer.phone}</span>
+                            {stats && <span className="text-[10px] text-muted-foreground">{stats.lastRun}</span>}
+                          </div>
+                          {stats && (
+                            <div className="mt-2 h-1 bg-muted rounded-full overflow-hidden">
+                              <div className="progress-bar h-full rounded-full" style={{ width: `${Math.min((parseFloat(stats.km) / 80) * 100, 100)}%` }} />
+                            </div>
+                          )}
+                        </div>
+                        <button
+                          onClick={() => onViewRacer(racer)}
+                          className="flex-shrink-0 p-2 rounded-lg border border-border text-muted-foreground hover:border-primary/50 hover:text-primary transition-all ml-1"
+                        >
+                          <Icon name="ChevronRight" size={16} />
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
+
+        {loading && activeTab === "map" && (
           <div className="flex justify-center py-8">
             <div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin" />
-          </div>
-        )}
-
-        {error && (
-          <div className="bg-red-500/10 border border-red-500/30 rounded-xl px-4 py-3 flex items-center gap-2">
-            <Icon name="AlertCircle" size={14} className="text-red-400" />
-            <span className="text-xs text-red-300">{error}</span>
-          </div>
-        )}
-
-        {!loading && !error && (
-          <div className="space-y-2">
-            <p className="text-[10px] text-muted-foreground uppercase tracking-wider">
-              Гонщики · {filtered.length}
-            </p>
-            {filtered.map((racer, idx) => {
-              const stats = mockStats[racer.id];
-              const color = COLORS[idx % COLORS.length];
-              return (
-                <div key={racer.id} className="stat-card rounded-xl p-4 animate-slide-up" style={{ animationDelay: `${idx * 0.05}s`, animationFillMode: "both" }}>
-                  <div className="flex items-center gap-3">
-                    <div className={`w-11 h-11 rounded-xl ${color} flex items-center justify-center font-display text-white text-sm flex-shrink-0`}>
-                      {racer.initials}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center justify-between">
-                        <span className="font-display text-sm text-white uppercase tracking-wider truncate">{racer.name}</span>
-                        {stats && (
-                          <span className="font-mono-data text-xs neon-text ml-2 flex-shrink-0">{stats.km} км</span>
-                        )}
-                      </div>
-                      <div className="flex items-center gap-3 mt-0.5">
-                        <span className="font-mono-data text-xs text-muted-foreground">{racer.phone}</span>
-                        {stats && (
-                          <span className="text-[10px] text-muted-foreground">{stats.lastRun}</span>
-                        )}
-                      </div>
-                      {stats && (
-                        <div className="mt-2 h-1 bg-muted rounded-full overflow-hidden">
-                          <div
-                            className="progress-bar h-full rounded-full"
-                            style={{ width: `${Math.min((parseFloat(stats.km) / 80) * 100, 100)}%` }}
-                          />
-                        </div>
-                      )}
-                    </div>
-                    <button
-                      onClick={() => onViewRacer(racer)}
-                      className="flex-shrink-0 p-2 rounded-lg border border-border text-muted-foreground hover:border-primary/50 hover:text-primary transition-all ml-1"
-                      title="Открыть кабинет гонщика"
-                    >
-                      <Icon name="ChevronRight" size={16} />
-                    </button>
-                  </div>
-                </div>
-              );
-            })}
           </div>
         )}
       </div>
