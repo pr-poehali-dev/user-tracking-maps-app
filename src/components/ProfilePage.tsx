@@ -1,6 +1,13 @@
 import { useState } from "react";
 import Icon from "@/components/ui/icon";
 
+interface User {
+  id: number;
+  name: string;
+  account_type: string;
+  initials: string;
+}
+
 const friends = [
   { name: "Алексей К.", km: "38.2", runs: 12, avatar: "А", color: "bg-blue-500" },
   { name: "Мария П.", km: "51.7", runs: 15, avatar: "М", color: "bg-purple-500" },
@@ -17,10 +24,17 @@ const achievements = [
   { icon: "👥", title: "Социальный бегун", desc: "Поделиться 5 треками", done: false },
 ];
 
-export default function ProfilePage() {
+interface Props {
+  user?: User;
+  isAdminView?: boolean;
+  onLogout?: () => void;
+  onBackToAdmin?: () => void;
+}
+
+export default function ProfilePage({ user, isAdminView, onLogout, onBackToAdmin }: Props) {
   const [editMode, setEditMode] = useState(false);
   const [compareMode, setCompareMode] = useState<number | null>(null);
-  const [name, setName] = useState("Иван Петров");
+  const [name, setName] = useState(user?.name || "Иван Петров");
   const [goal, setGoal] = useState("50");
 
   const myKm = 51.5;
@@ -31,15 +45,26 @@ export default function ProfilePage() {
     <div className="flex flex-col h-full overflow-y-auto">
       <div className="p-4 space-y-4 animate-fade-in">
 
+        {/* Admin view banner */}
+        {isAdminView && (
+          <button
+            onClick={onBackToAdmin}
+            className="w-full flex items-center gap-2 px-4 py-2.5 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-400 text-xs font-display uppercase tracking-wider hover:bg-amber-500/20 transition-all"
+          >
+            <Icon name="ArrowLeft" size={14} />
+            Вернуться в кабинет администратора
+          </button>
+        )}
+
         {/* Profile Header */}
         <div className="stat-card rounded-xl p-5 relative overflow-hidden">
           <div className="absolute top-0 right-0 w-32 h-32 bg-primary/5 rounded-full -translate-y-8 translate-x-8" />
           <div className="flex items-center gap-4 mb-4">
             <div className="w-16 h-16 rounded-2xl bg-primary/20 border border-primary/30 flex items-center justify-center">
-              <span className="font-display text-2xl neon-text">ИП</span>
+              <span className="font-display text-2xl neon-text">{user?.initials || "ИП"}</span>
             </div>
             <div className="flex-1">
-              {editMode ? (
+              {editMode && !isAdminView ? (
                 <input
                   value={name}
                   onChange={e => setName(e.target.value)}
@@ -49,18 +74,20 @@ export default function ProfilePage() {
                 <h3 className="font-display text-xl text-white uppercase tracking-wider">{name}</h3>
               )}
               <div className="flex items-center gap-2">
-                <span className="text-xs text-muted-foreground">@ivan.runner</span>
-                <span className="text-[10px] px-1.5 py-0.5 bg-amber-500/20 text-amber-400 rounded uppercase tracking-wider">Про</span>
+                <span className="text-xs text-muted-foreground">Гонщик</span>
+                <span className="text-[10px] px-1.5 py-0.5 bg-primary/20 text-primary rounded uppercase tracking-wider">Активен</span>
               </div>
             </div>
-            <button
-              onClick={() => setEditMode(!editMode)}
-              className={`p-2 rounded-lg border transition-all ${
-                editMode ? 'border-primary/50 bg-primary/10 text-primary' : 'border-border text-muted-foreground hover:border-primary/50'
-              }`}
-            >
-              <Icon name={editMode ? "Check" : "Pencil"} size={16} />
-            </button>
+            {!isAdminView && (
+              <button
+                onClick={() => setEditMode(!editMode)}
+                className={`p-2 rounded-lg border transition-all ${
+                  editMode ? 'border-primary/50 bg-primary/10 text-primary' : 'border-border text-muted-foreground hover:border-primary/50'
+                }`}
+              >
+                <Icon name={editMode ? "Check" : "Pencil"} size={16} />
+              </button>
+            )}
           </div>
 
           <div className="grid grid-cols-3 gap-3">
@@ -194,6 +221,17 @@ export default function ProfilePage() {
             ))}
           </div>
         </div>
+
+        {/* Logout */}
+        {!isAdminView && onLogout && (
+          <button
+            onClick={onLogout}
+            className="w-full flex items-center justify-center gap-2 py-3 rounded-xl border border-red-500/30 text-red-400 font-display text-sm tracking-wider uppercase hover:bg-red-500/10 transition-all mb-4"
+          >
+            <Icon name="LogOut" size={16} />
+            Выйти из аккаунта
+          </button>
+        )}
       </div>
     </div>
   );

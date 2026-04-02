@@ -1,0 +1,1 @@
+CREATE TABLE racers (id SERIAL PRIMARY KEY, phone VARCHAR(20));
