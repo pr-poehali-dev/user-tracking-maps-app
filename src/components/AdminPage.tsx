@@ -139,6 +139,27 @@ export default function AdminPage({ sessionId, onViewRacer, onLogout }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [activeTab, setActiveTab] = useState<"list" | "map">("map");
+  const [confirmDelete, setConfirmDelete] = useState<Racer | null>(null);
+  const [deleting, setDeleting] = useState(false);
+
+  const handleDelete = async () => {
+    if (!confirmDelete) return;
+    setDeleting(true);
+    try {
+      const res = await fetch(`${AUTH_URL}?action=delete_racer`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-Session-Id": sessionId },
+        body: JSON.stringify({ racer_id: confirmDelete.id }),
+      });
+      const data = await res.json();
+      if (data.ok) {
+        setRacers(prev => prev.filter(r => r.id !== confirmDelete.id));
+        setConfirmDelete(null);
+      }
+    } finally {
+      setDeleting(false);
+    }
+  };
 
   useEffect(() => {
     fetch(`${AUTH_URL}?action=racers`, { headers: { "X-Session-Id": sessionId } })
@@ -275,12 +296,20 @@ export default function AdminPage({ sessionId, onViewRacer, onLogout }: Props) {
                             </div>
                           )}
                         </div>
-                        <button
-                          onClick={() => onViewRacer(racer)}
-                          className="flex-shrink-0 p-2 rounded-lg border border-border text-muted-foreground hover:border-primary/50 hover:text-primary transition-all ml-1"
-                        >
-                          <Icon name="ChevronRight" size={16} />
-                        </button>
+                        <div className="flex gap-1 flex-shrink-0 ml-1">
+                          <button
+                            onClick={() => onViewRacer(racer)}
+                            className="p-2 rounded-lg border border-border text-muted-foreground hover:border-primary/50 hover:text-primary transition-all"
+                          >
+                            <Icon name="ChevronRight" size={16} />
+                          </button>
+                          <button
+                            onClick={() => setConfirmDelete(racer)}
+                            className="p-2 rounded-lg border border-border text-muted-foreground hover:border-red-500/50 hover:text-red-400 transition-all"
+                          >
+                            <Icon name="Trash2" size={16} />
+                          </button>
+                        </div>
                       </div>
                     </div>
                   );
@@ -296,6 +325,46 @@ export default function AdminPage({ sessionId, onViewRacer, onLogout }: Props) {
           </div>
         )}
       </div>
+
+      {/* Confirm delete modal */}
+      {confirmDelete && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
+          <div className="card-dark rounded-2xl p-6 w-full max-w-sm border border-red-500/30">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 rounded-xl bg-red-500/20 flex items-center justify-center flex-shrink-0">
+                <Icon name="Trash2" size={18} className="text-red-400" />
+              </div>
+              <div>
+                <h3 className="font-display text-white uppercase tracking-wider">Удалить гонщика?</h3>
+                <p className="text-xs text-muted-foreground mt-0.5">Это действие нельзя отменить</p>
+              </div>
+            </div>
+            <div className="bg-muted rounded-xl px-4 py-3 mb-5">
+              <p className="font-display text-white text-sm uppercase tracking-wider">{confirmDelete.name}</p>
+              <p className="font-mono-data text-xs text-muted-foreground mt-0.5">{confirmDelete.phone}</p>
+            </div>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setConfirmDelete(null)}
+                className="flex-1 py-2.5 rounded-xl border border-border text-muted-foreground font-display text-xs uppercase tracking-wider hover:border-primary/50 transition-all"
+              >
+                Отмена
+              </button>
+              <button
+                onClick={handleDelete}
+                disabled={deleting}
+                className="flex-1 py-2.5 rounded-xl bg-red-500/20 border border-red-500/50 text-red-400 font-display text-xs uppercase tracking-wider hover:bg-red-500/30 transition-all disabled:opacity-60 flex items-center justify-center gap-2"
+              >
+                {deleting
+                  ? <div className="w-4 h-4 border-2 border-red-400 border-t-transparent rounded-full animate-spin" />
+                  : <Icon name="Trash2" size={14} />
+                }
+                {deleting ? "Удаляю..." : "Удалить"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

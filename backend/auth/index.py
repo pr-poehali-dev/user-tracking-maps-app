@@ -44,6 +44,8 @@ def handler(event: dict, context) -> dict:
         return me(event)
     if action == "racers" and method == "GET":
         return get_racers(event)
+    if action == "delete_racer" and method == "POST":
+        return delete_racer(event)
 
     return {"statusCode": 404, "headers": CORS, "body": json.dumps({"error": "Not found"})}
 
@@ -149,3 +151,34 @@ def get_racers(event: dict) -> dict:
     conn.close()
 
     return {"statusCode": 200, "headers": CORS, "body": json.dumps({"racers": racers})}
+
+
+def delete_racer(event: dict) -> dict:
+    session_id = event.get("headers", {}).get("X-Session-Id", "")
+    if not session_id:
+        return {"statusCode": 401, "headers": CORS, "body": json.dumps({"error": "Не авторизован"})}
+
+    body = json.loads(event.get("body") or "{}")
+    racer_id = body.get("racer_id")
+    if not racer_id:
+        return {"statusCode": 400, "headers": CORS, "body": json.dumps({"error": "Не указан racer_id"})}
+
+    conn = get_conn()
+    cur = conn.cursor()
+
+    cur.execute(
+        """SELECT r.account_type FROM auth_sessions s JOIN racers r ON r.id = s.racer_id
+           WHERE s.id = %s AND s.expires_at > NOW()""",
+        (session_id,)
+    )
+    row = cur.fetchone()
+    if not row or row[0] != "admin":
+        conn.close()
+        return {"statusCode": 403, "headers": CORS, "body": json.dumps({"error": "Нет доступа"})}
+
+    cur.execute("UPDATE auth_sessions SET expires_at = NOW() WHERE racer_id = %s", (racer_id,))
+    cur.execute("UPDATE racers SET account_type = 'deleted' WHERE id = %s AND account_type = 'racer'", (racer_id,))
+    conn.commit()
+    conn.close()
+
+    return {"statusCode": 200, "headers": CORS, "body": json.dumps({"ok": True})}
