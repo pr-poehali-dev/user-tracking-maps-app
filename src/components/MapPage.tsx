@@ -95,13 +95,8 @@ export default function MapPage() {
               } else {
                 const userMark = new window.ymaps.Placemark(
                   coord,
-                  {},
-                  {
-                    iconLayout: "default#image",
-                    iconImageHref: "",
-                    iconColor: "#22c55e",
-                    preset: "islands#circleDotIcon",
-                  }
+                  { hintContent: "Вы здесь" },
+                  { preset: "islands#greenCircleDotIcon" }
                 );
                 map.geoObjects.add(userMark);
                 currentMarkerRef.current = userMark;
