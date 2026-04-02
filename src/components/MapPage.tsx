@@ -15,6 +15,7 @@ export default function MapPage() {
   const placemarksRef = useRef<any[]>([]);
   const currentMarkerRef = useRef<any>(null);
   const watchIdRef = useRef<number | null>(null);
+  const liveWatchIdRef = useRef<number | null>(null);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const coordsRef = useRef<number[][]>([]);
 
@@ -77,28 +78,43 @@ export default function MapPage() {
         ymapRef.current = map;
         setMapReady(true);
 
-        // Show user location on load
-        navigator.geolocation?.getCurrentPosition(
-          (pos) => {
-            const coord: [number, number] = [pos.coords.latitude, pos.coords.longitude];
-            map.setCenter(coord, 16);
+        // Live position tracking (always on)
+        if (navigator.geolocation) {
+          liveWatchIdRef.current = navigator.geolocation.watchPosition(
+            (pos) => {
+              const coord: [number, number] = [pos.coords.latitude, pos.coords.longitude];
 
-            const userMark = new window.ymaps.Placemark(
-              coord,
-              { balloonContent: "Вы здесь" },
-              {
-                preset: "islands#circleDotIcon",
-                iconColor: "#22c55e",
+              // First fix — center map
+              if (!currentMarkerRef.current) {
+                map.setCenter(coord, 16);
               }
-            );
-            map.geoObjects.add(userMark);
-            currentMarkerRef.current = userMark;
-          },
-          () => {
-            setLocationError("Нет доступа к геолокации. Разрешите доступ в настройках браузера.");
-          },
-          { enableHighAccuracy: true, timeout: 10000 }
-        );
+
+              // Update marker position
+              if (currentMarkerRef.current) {
+                currentMarkerRef.current.geometry.setCoordinates(coord);
+              } else {
+                const userMark = new window.ymaps.Placemark(
+                  coord,
+                  {},
+                  {
+                    iconLayout: "default#image",
+                    iconImageHref: "",
+                    iconColor: "#22c55e",
+                    preset: "islands#circleDotIcon",
+                  }
+                );
+                map.geoObjects.add(userMark);
+                currentMarkerRef.current = userMark;
+              }
+            },
+            () => {
+              setLocationError("Нет доступа к геолокации. Разрешите доступ в настройках браузера.");
+            },
+            { enableHighAccuracy: true, maximumAge: 2000, timeout: 15000 }
+          );
+        } else {
+          setLocationError("Ваш браузер не поддерживает геолокацию.");
+        }
       });
     };
 
@@ -113,6 +129,12 @@ export default function MapPage() {
       }, 200);
       return () => clearInterval(interval);
     }
+
+    return () => {
+      if (liveWatchIdRef.current !== null) {
+        navigator.geolocation.clearWatch(liveWatchIdRef.current);
+      }
+    };
   }, []);
 
   const startRecording = () => {
@@ -133,10 +155,6 @@ export default function MapPage() {
     }
     placemarksRef.current.forEach((p) => ymapRef.current.geoObjects.remove(p));
     placemarksRef.current = [];
-    if (currentMarkerRef.current) {
-      ymapRef.current.geoObjects.remove(currentMarkerRef.current);
-      currentMarkerRef.current = null;
-    }
 
     setIsRecording(true);
 
@@ -195,19 +213,10 @@ export default function MapPage() {
             placemarksRef.current.push(startMark);
           }
 
-          // Current position marker
+          // Move live marker to current position and follow
           if (currentMarkerRef.current) {
-            map.geoObjects.remove(currentMarkerRef.current);
+            currentMarkerRef.current.geometry.setCoordinates(coord);
           }
-          currentMarkerRef.current = new window.ymaps.Placemark(
-            coord,
-            {},
-            {
-              preset: "islands#circleDotIcon",
-              iconColor: "#ffffff",
-            }
-          );
-          map.geoObjects.add(currentMarkerRef.current);
           map.setCenter(coord, map.getZoom(), { smooth: true, duration: 500 });
         },
         (err) => {
